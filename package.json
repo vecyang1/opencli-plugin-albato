@@ -1,6 +1,6 @@
 {
   "name": "opencli-plugin-albato",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Production-grade Albato automation suite for OpenCLI: full lifecycle management, builder step inspection, two-sided verified pause/start, deadloop failure diagnosis, and targeted retry.",
   "type": "module",
   "main": "opencli-plugin.json",

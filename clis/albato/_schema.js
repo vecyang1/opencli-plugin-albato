@@ -3,7 +3,7 @@ const URL_PATTERN = /https?:\/\/[^\s<>"']+/gi;
 const SECRET_VALUE_PATTERN = /\b(token|api[_-]?key|authorization|password|secret)\s*[:=]\s*[^\s,;]+/gi;
 const PHONE_PATTERN = /(?:\+\d[\d().\s-]{7,}\d|\b(?:phone|tel|mobile)\s*[:=]\s*\d[\d().\s-]{6,}\d)/gi;
 const MAX_VISIBLE_TEXT = 240;
-const MAX_LIMIT = 100;
+const MAX_LIMIT = 500;
 
 export const ALBATO_COMMAND_FIELDS = Object.freeze({
   automations: [

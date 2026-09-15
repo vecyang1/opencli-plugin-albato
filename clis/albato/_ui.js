@@ -61,12 +61,12 @@ export async function gotoAlbato(page, path, label) {
   const targetRoute = path.split('?')[0];
   const targetUrl = `${ALBATO_ORIGIN}${path}`;
 
-  // If the browser is already on the exact requested pathname, avoid reloading
+  // If the browser is already on the exact requested pathname and query, avoid reloading
   let alreadyOnRoute = false;
   try {
     const currentParsed = new URL(currentUrl);
     const targetParsed = new URL(targetUrl);
-    alreadyOnRoute = (currentParsed.pathname === targetParsed.pathname) && !currentUrl.includes('about:blank');
+    alreadyOnRoute = (currentParsed.pathname === targetParsed.pathname) && (currentParsed.search === targetParsed.search) && !currentUrl.includes('about:blank');
   } catch {
     alreadyOnRoute = false;
   }
@@ -90,108 +90,164 @@ export async function gotoAlbato(page, path, label) {
   }
 }
 
-export async function readAutomationCards(page) {
+export async function readAutomationCards(page, { allPages = false, limit = 25 } = {}) {
   await waitForElement(page, 'a[href*="/app/bundle/edit/"], .al-bundle-card_view_base, .al-bundle-card', 8000);
 
-  return ensureArray(await page.evaluate(`(() => {
-    const clean = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
-    const cards = [];
-    const seen = new Set();
+  const allCards = [];
+  const seen = new Set();
+  const maxLoops = allPages ? 30 : Math.ceil(limit / 15) + 2;
 
-    const idRegex = new RegExp('/app/bundle/(?:edit|history)/(\\\\d+)');
-    const digitsRegex = new RegExp('\\\\b\\\\d{4,}\\\\b');
-    const pauseRegex = new RegExp('\\\\bPause\\\\b', 'i');
-    const startRegex = new RegExp('\\\\bStart\\\\b', 'i');
-    const opsRegex = new RegExp('Operations:\\\\s*(\\\\d+)\\\\s+total\\\\s*\\\\/\\\\s*(\\\\d+)\\\\s+in\\\\s+24\\\\s+hours', 'i');
+  for (let loop = 0; loop < maxLoops; loop++) {
+    const pageCards = ensureArray(await page.evaluate(`(() => {
+      const clean = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
+      const cards = [];
 
-    const cardNodes = Array.from(document.querySelectorAll('.al-bundle-card.al-bundle-card_view_base, .al-bundle-card:not(.al-bundle-card_view_empty)'));
-    for (const card of cardNodes) {
-      let automationId = '';
-      const editLink = card.querySelector('a[href*="/app/bundle/edit/"], a[href*="/app/bundle/history/"]');
-      if (editLink) {
-        const href = editLink.getAttribute('href') || '';
-        const match = href.match(idRegex);
-        if (match) automationId = match[1];
-      }
-      if (!automationId) {
-        const idInput = card.querySelector('input[type="checkbox"], .al-checkbox__real, label.al-checkbox__label');
-        const rawId = idInput?.id || idInput?.name || idInput?.getAttribute('for') || '';
-        const match = rawId.match(digitsRegex);
-        if (match) automationId = match[0];
-      }
-      if (!automationId || seen.has(automationId)) continue;
-      seen.add(automationId);
+      const idRegex = new RegExp('/app/bundle/(?:edit|history)/(\\\\d+)');
+      const digitsRegex = new RegExp('\\\\b\\\\d{4,}\\\\b');
+      const pauseRegex = new RegExp('\\\\bPause\\\\b', 'i');
+      const startRegex = new RegExp('\\\\bStart\\\\b', 'i');
+      const opsRegex = new RegExp('Operations:\\\\s*(\\\\d+)\\\\s+total\\\\s*\\\\/\\\\s*(\\\\d+)\\\\s+in\\\\s+24\\\\s+hours', 'i');
 
-      const titleEl = card.querySelector('.al-bundle-card-header__title, [class*="header__title"], h2, h3');
-      const name = clean(titleEl?.getAttribute('title') || titleEl?.innerText || '');
+      const cardNodes = Array.from(document.querySelectorAll('.al-bundle-card.al-bundle-card_view_base, .al-bundle-card:not(.al-bundle-card_view_empty)'));
+      for (const card of cardNodes) {
+        let automationId = '';
+        const editLink = card.querySelector('a[href*="/app/bundle/edit/"], a[href*="/app/bundle/history/"]');
+        if (editLink) {
+          const match = (editLink.getAttribute('href') || '').match(idRegex);
+          if (match) automationId = match[1];
+        }
+        if (!automationId) {
+          const idInput = card.querySelector('input[type="checkbox"], .al-checkbox__real, label.al-checkbox__label');
+          const rawId = idInput?.id || idInput?.name || idInput?.getAttribute('for') || '';
+          const match = rawId.match(digitsRegex);
+          if (match) automationId = match[0];
+        }
+        if (!automationId) continue;
 
-      const cardText = clean(card.innerText || '');
-      const controls = card.querySelector('.al-bundle-card__controls');
-      const controlText = clean(controls?.innerText || cardText);
-      let state = 'unknown';
-      if (pauseRegex.test(controlText)) {
-        state = 'running';
-      } else if (startRegex.test(controlText)) {
-        state = 'stopped';
-      }
+        const titleEl = card.querySelector('.al-bundle-card-header__title, [class*="header__title"], h2, h3');
+        const name = clean(titleEl?.getAttribute('title') || titleEl?.innerText || '');
 
-      const steps = Array.from(card.querySelectorAll('ul.al-bundle-card-steps__list > li.al-bundle-card-steps__step, .al-bundle-card-steps__step'));
-      let trigger = '';
-      let action = '';
-      if (steps.length > 0) {
-        const tApp = steps[0].querySelector('div:first-child .al-tooltip__inner[title]')?.getAttribute('title') || '';
-        const tEvt = steps[0].querySelector('.al-bundle-card-steps__text [title]')?.getAttribute('title') || steps[0].querySelector('.al-bundle-card-steps__text')?.innerText || '';
-        trigger = clean(tEvt || tApp);
-      }
-      if (steps.length > 1) {
-        const aApp = steps[1].querySelector('div:first-child .al-tooltip__inner[title]')?.getAttribute('title') || '';
-        const aEvt = steps[1].querySelector('.al-bundle-card-steps__text [title]')?.getAttribute('title') || steps[1].querySelector('.al-bundle-card-steps__text')?.innerText || '';
-        action = clean(aEvt || aApp);
-      }
+        const cardText = clean(card.innerText || '');
+        const controls = card.querySelector('.al-bundle-card__controls');
+        const controlText = clean(controls?.innerText || cardText);
+        let state = 'unknown';
+        if (pauseRegex.test(controlText)) {
+          state = 'running';
+        } else if (startRegex.test(controlText)) {
+          state = 'stopped';
+        }
 
-      const opsEl = card.querySelector('.al-bundle-card__meta');
-      const opsText = clean(opsEl?.innerText || cardText);
-      const opsMatch = opsText.match(opsRegex);
-      const operationsTotal = opsMatch ? opsMatch[1] : '0';
-      const operations24h = opsMatch ? opsMatch[2] : '0';
+        const steps = Array.from(card.querySelectorAll('ul.al-bundle-card-steps__list > li.al-bundle-card-steps__step, .al-bundle-card-steps__step'));
+        let trigger = '';
+        let action = '';
+        if (steps.length > 0) {
+          const tApp = steps[0].querySelector('div:first-child .al-tooltip__inner[title]')?.getAttribute('title') || '';
+          const tEvt = steps[0].querySelector('.al-bundle-card-steps__text [title]')?.getAttribute('title') || steps[0].querySelector('.al-bundle-card-steps__text')?.innerText || '';
+          trigger = clean(tEvt || tApp);
+        }
+        if (steps.length > 1) {
+          const aApp = steps[1].querySelector('div:first-child .al-tooltip__inner[title]')?.getAttribute('title') || '';
+          const aEvt = steps[1].querySelector('.al-bundle-card-steps__text [title]')?.getAttribute('title') || steps[1].querySelector('.al-bundle-card-steps__text')?.innerText || '';
+          action = clean(aEvt || aApp);
+        }
 
-      cards.push({
-        automationId,
-        name,
-        state,
-        trigger,
-        action,
-        operationsTotal,
-        operations24h,
-      });
-    }
+        const opsEl = card.querySelector('.al-bundle-card__meta');
+        const opsText = clean(opsEl?.innerText || cardText);
+        const opsMatch = opsText.match(opsRegex);
+        const operationsTotal = opsMatch ? opsMatch[1] : '0';
+        const operations24h = opsMatch ? opsMatch[2] : '0';
 
-    if (cards.length === 0) {
-      for (const link of Array.from(document.querySelectorAll('a[href*="/app/bundle/edit/"]'))) {
-        const match = (link.getAttribute('href') || '').match(idRegex);
-        if (!match || seen.has(match[1])) continue;
-        let card = link;
-        while (card.parentElement && !opsRegex.test(card.innerText || '')) card = card.parentElement;
-        const lines = String(card.innerText || '').split('\\n').map(clean).filter(Boolean);
-        if (!lines.length) continue;
-        seen.add(match[1]);
-        const text = clean(card.innerText);
-        const ops = text.match(opsRegex);
-        const semanticLines = lines.filter((line) => !/^(Operations:|Pause$|Start$|Test$|Create new automation$|^\\d+$)/i.test(line));
         cards.push({
-          automationId: match[1],
-          name: semanticLines[0] || '',
-          state: pauseRegex.test(text) ? 'running' : (startRegex.test(text) ? 'stopped' : 'unknown'),
-          trigger: semanticLines[1] || '',
-          action: semanticLines[2] || '',
-          operationsTotal: ops?.[1] || '',
-          operations24h: ops?.[2] || '',
+          automationId,
+          name,
+          state,
+          trigger,
+          action,
+          operationsTotal,
+          operations24h,
         });
       }
+
+      if (cards.length === 0) {
+        for (const link of Array.from(document.querySelectorAll('a[href*="/app/bundle/edit/"]'))) {
+          const match = (link.getAttribute('href') || '').match(idRegex);
+          if (!match) continue;
+          let card = link;
+          while (card.parentElement && !opsRegex.test(card.innerText || '')) card = card.parentElement;
+          const lines = String(card.innerText || '').split('\\n').map(clean).filter(Boolean);
+          if (!lines.length) continue;
+          const text = clean(card.innerText);
+          const ops = text.match(opsRegex);
+          const semanticLines = lines.filter((line) => !/^(Operations:|Pause$|Start$|Test$|Create new automation$|^\\d+$)/i.test(line));
+          cards.push({
+            automationId: match[1],
+            name: semanticLines[0] || '',
+            state: pauseRegex.test(text) ? 'running' : (startRegex.test(text) ? 'stopped' : 'unknown'),
+            trigger: semanticLines[1] || '',
+            action: semanticLines[2] || '',
+            operationsTotal: ops?.[1] || '',
+            operations24h: ops?.[2] || '',
+          });
+        }
+      }
+
+      return cards;
+    })()`), 'Albato automations');
+
+    for (const card of pageCards) {
+      if (!seen.has(card.automationId)) {
+        seen.add(card.automationId);
+        allCards.push(card);
+      }
     }
 
-    return cards;
-  })()`), 'Albato automations');
+    if (!allPages && allCards.length >= limit) break;
+
+    const pagination = ensureObject(await page.evaluate(`(() => {
+      const clean = (v) => String(v || '').replace(/\\s+/g, ' ').trim();
+      const p = document.querySelector('.al-pagination');
+      const btns = p ? Array.from(p.querySelectorAll('button')) : [];
+      const pText = clean(p?.innerText || '');
+      const match = pText.match(new RegExp('(\\\\d+)\\\\s+from\\\\s+(\\\\d+)', 'i'));
+      const currentPage = match ? parseInt(match[1], 10) : 1;
+      const totalPages = match ? parseInt(match[2], 10) : 1;
+      const nextBtn = btns[1];
+      const hasNext = Boolean(nextBtn && !nextBtn.disabled && !nextBtn.classList.contains('is-disabled') && currentPage < totalPages);
+      const editLink = document.querySelector('a[href*="/app/bundle/edit/"]');
+      const firstId = editLink ? (editLink.getAttribute('href') || '') : '';
+      return { currentPage, totalPages, hasNext, firstId };
+    })()`), 'Albato pagination');
+
+    if (!pagination.hasNext || pagination.currentPage >= pagination.totalPages) break;
+
+    // Click next button
+    await page.evaluate(`(() => {
+      const p = document.querySelector('.al-pagination');
+      const btns = p ? Array.from(p.querySelectorAll('button')) : [];
+      if (btns[1]) btns[1].click();
+    })()`);
+
+    // Wait for cards to update
+    const targetPage = pagination.currentPage + 1;
+    const prevFirstId = pagination.firstId;
+    let flipped = false;
+    for (let w = 0; w < 10; w++) {
+      if (typeof page?.sleep === 'function') await page.sleep(0.5);
+      else if (typeof page?.wait === 'function') await page.wait(0.5);
+      else await new Promise((r) => setTimeout(r, 500));
+
+      flipped = Boolean(await page.evaluate(`(() => {
+        const p = document.querySelector('.al-pagination');
+        const pText = (p?.innerText || '').replace(/\\s+/g, ' ').trim();
+        const editLink = document.querySelector('a[href*="/app/bundle/edit/"]');
+        const curHref = editLink?.getAttribute('href') || '';
+        return pText.startsWith('${targetPage} from') || (curHref && curHref !== '${prevFirstId}');
+      })()`).catch(() => false));
+      if (flipped) break;
+    }
+  }
+
+  return allCards;
 }
 
 export async function readHistoryRows(page) {

@@ -69,7 +69,7 @@ describe('private Albato OpenCLI adapter contract', () => {
   it('normalizes bounded limits without silently accepting invalid input', () => {
     assert.equal(normalizeLimit(undefined), 25);
     assert.equal(normalizeLimit('5'), 5);
-    assert.equal(normalizeLimit(1000), 100);
+    assert.equal(normalizeLimit(1000), 500);
     assert.throws(() => normalizeLimit('zero'));
     assert.throws(() => normalizeLimit(0));
   });
