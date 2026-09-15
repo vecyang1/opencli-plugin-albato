@@ -1,0 +1,32 @@
+{
+  "name": "opencli-plugin-albato",
+  "version": "1.0.0",
+  "description": "Production-grade Albato automation suite for OpenCLI: full lifecycle management, builder step inspection, two-sided verified pause/start, deadloop failure diagnosis, and targeted retry.",
+  "type": "module",
+  "main": "opencli-plugin.json",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "test": "node --check clis/albato/*.js && node --test clis/albato/commands.test.mjs",
+    "install-adapters": "bash scripts/install-adapters.sh"
+  },
+  "keywords": [
+    "opencli",
+    "opencli-plugin",
+    "albato",
+    "automation",
+    "workflow",
+    "integration",
+    "agentic"
+  ],
+  "author": "Vec Yang",
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vecyang1/opencli-plugin-albato.git"
+  },
+  "peerDependencies": {
+    "@jackwener/opencli": ">=1.8.6"
+  }
+}
