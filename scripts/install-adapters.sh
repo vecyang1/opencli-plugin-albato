@@ -1,9 +1,21 @@
 #!/usr/bin/env bash
+# Deploy the albato adapters into OpenCLI's local override directory (~/.opencli/clis/albato).
 set -euo pipefail
 
-TARGET_DIR="${HOME}/.opencli/clis/albato"
-SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../clis/albato" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SRC="$ROOT/clis/albato"
+DEST="${HOME}/.opencli/clis/albato"
 
-mkdir -p "${TARGET_DIR}"
-cp -r "${SOURCE_DIR}/"* "${TARGET_DIR}/"
-echo "[OK] Installed opencli-plugin-albato adapters to ${TARGET_DIR}"
+for f in "$SRC"/*.js; do node --check "$f"; done
+
+if [ -L "$DEST" ]; then
+  rm "$DEST"
+fi
+mkdir -p "$DEST"
+
+# Remove any symlinks inside DEST and copy real files
+find "$DEST" -type l -delete 2>/dev/null || true
+cp -p "$SRC"/* "$DEST/"
+
+echo "[OK] Installed $(ls -1 "$DEST"/*.js | wc -l | tr -d ' ') adapters -> $DEST"
+opencli validate albato
